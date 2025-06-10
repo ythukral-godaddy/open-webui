@@ -99,6 +99,7 @@ class FileForm(BaseModel):
 
 class FilesTable:
     def insert_new_file(self, user_id: str, form_data: FileForm) -> Optional[FileModel]:
+        log.debug(f"Inserting new file for user {user_id} with data: {form_data}")
         with get_db() as db:
             file = FileModel(
                 **{
@@ -191,6 +192,7 @@ class FilesTable:
                 return None
 
     def update_file_data_by_id(self, id: str, data: dict) -> Optional[FileModel]:
+        log.debug("update_file_data_by_id called with id: %s, data: %s", id, data)
         with get_db() as db:
             try:
                 file = db.query(File).filter_by(id=id).first()

@@ -102,7 +102,7 @@ def upload_file(
                 detail=ERROR_MESSAGES.DEFAULT("Invalid metadata format"),
             )
     file_metadata = metadata if metadata else {}
-
+    log.debug(f"file_metadata: {file_metadata}")
     try:
         unsanitized_filename = file.filename
         filename = os.path.basename(unsanitized_filename)

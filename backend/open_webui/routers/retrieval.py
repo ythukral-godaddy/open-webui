@@ -31,6 +31,9 @@ import tiktoken
 from langchain.text_splitter import RecursiveCharacterTextSplitter, TokenTextSplitter
 from langchain_core.documents import Document
 
+import open_webui.godaddy.kb.retireval_proxy
+from open_webui.godaddy.kb.goknowb import GoKnowbWrapper
+from open_webui.godaddy.kb.goknowb_api_client import SearchType
 from open_webui.models.files import FileModel, Files
 from open_webui.models.knowledge import Knowledges
 from open_webui.storage.provider import Storage
@@ -1067,6 +1070,9 @@ def save_docs_to_vector_db(
     add: bool = False,
     user=None,
 ) -> bool:
+    # replacing the original implementation with the new one
+    return open_webui.godaddy.kb.retireval_proxy.save_docs_to_vector_db(request, docs, collection_name, metadata, overwrite, split, add, user)
+
     def _get_docs_info(docs: list[Document]) -> str:
         docs_info = set()
 
@@ -1237,6 +1243,8 @@ def process_file(
     user=Depends(get_verified_user),
 ):
     try:
+        log.debug(f"Processing file with form data: {json.dumps(form_data)}")
+        goknob_wrapper = GoKnowbWrapper.get_instance()
         file = Files.get_file_by_id(form_data.file_id)
 
         collection_name = form_data.collection_name
@@ -1245,12 +1253,14 @@ def process_file(
             collection_name = f"file-{file.id}"
 
         if form_data.content:
+            log.debug(f"log 1: content exist in form_data: {form_data.content}")
             # Update the content in the file
             # Usage: /files/{file_id}/data/content/update, /files/ (audio file upload pipeline)
 
             try:
                 # /files/{file_id}/data/content/update
-                VECTOR_DB_CLIENT.delete_collection(collection_name=f"file-{file.id}")
+                goknob_wrapper.delete_collection(collection_name=f"file-{file.id}")
+                # VECTOR_DB_CLIENT.delete_collection(collection_name=f"file-{file.id}")
             except:
                 # Audio file upload pipeline
                 pass
@@ -1273,6 +1283,7 @@ def process_file(
             # Check if the file has already been processed and save the content
             # Usage: /knowledge/{id}/file/add, /knowledge/{id}/file/update
 
+            # TODO YATIN: need to replace once we have full file fetch feature in KB
             result = VECTOR_DB_CLIENT.query(
                 collection_name=f"file-{file.id}", filter={"file_id": file.id}
             )
@@ -1332,7 +1343,7 @@ def process_file(
                 docs = loader.load(
                     file.filename, file.meta.get("content_type"), file_path
                 )
-
+                log.debug(f"file docs: {docs}")
                 docs = [
                     Document(
                         page_content=doc.page_content,
@@ -1369,6 +1380,9 @@ def process_file(
 
         hash = calculate_sha256_string(text_content)
         Files.update_file_hash_by_id(file.id, hash)
+
+        # TODO YATIN : update tfile hash in the database
+        # TODO YATIN : Update file content in the database
 
         if not request.app.state.config.BYPASS_EMBEDDING_AND_RETRIEVAL:
             try:
@@ -1922,43 +1936,52 @@ def query_doc_handler(
     user=Depends(get_verified_user),
 ):
     try:
-        if request.app.state.config.ENABLE_RAG_HYBRID_SEARCH:
-            collection_results = {}
-            collection_results[form_data.collection_name] = VECTOR_DB_CLIENT.get(
-                collection_name=form_data.collection_name
-            )
-            return query_doc_with_hybrid_search(
-                collection_name=form_data.collection_name,
-                collection_result=collection_results[form_data.collection_name],
-                query=form_data.query,
-                embedding_function=lambda query, prefix: request.app.state.EMBEDDING_FUNCTION(
-                    query, prefix=prefix, user=user
-                ),
-                k=form_data.k if form_data.k else request.app.state.config.TOP_K,
-                reranking_function=request.app.state.rf,
-                k_reranker=form_data.k_reranker
-                or request.app.state.config.TOP_K_RERANKER,
-                r=(
-                    form_data.r
-                    if form_data.r
-                    else request.app.state.config.RELEVANCE_THRESHOLD
-                ),
-                hybrid_bm25_weight=(
-                    form_data.hybrid_bm25_weight
-                    if form_data.hybrid_bm25_weight
-                    else request.app.state.config.HYBRID_BM25_WEIGHT
-                ),
-                user=user,
-            )
-        else:
-            return query_doc(
-                collection_name=form_data.collection_name,
-                query_embedding=request.app.state.EMBEDDING_FUNCTION(
-                    form_data.query, prefix=RAG_EMBEDDING_QUERY_PREFIX, user=user
-                ),
-                k=form_data.k if form_data.k else request.app.state.config.TOP_K,
-                user=user,
-            )
+        goknob_wrapper = GoKnowbWrapper.get_instance()
+        search_type = SearchType.LEXICAL_AND_SEMANTIC if request.app.state.config.ENABLE_RAG_HYBRID_SEARCH else SearchType.SEMANTIC
+
+        return goknob_wrapper.search(
+            collection_names=[form_data.collection_name], query=form_data.query,
+            limit=form_data.k or request.app.state.config.TOP_K,
+            search_type=search_type
+        )
+        # if request.app.state.config.ENABLE_RAG_HYBRID_SEARCH:
+        #
+        #     collection_results = {}
+        #     collection_results[form_data.collection_name] = VECTOR_DB_CLIENT.get(
+        #         collection_name=form_data.collection_name
+        #     )
+        #     return query_doc_with_hybrid_search(
+        #         collection_name=form_data.collection_name,
+        #         collection_result=collection_results[form_data.collection_name],
+        #         query=form_data.query,
+        #         embedding_function=lambda query, prefix: request.app.state.EMBEDDING_FUNCTION(
+        #             query, prefix=prefix, user=user
+        #         ),
+        #         k=form_data.k if form_data.k else request.app.state.config.TOP_K,
+        #         reranking_function=request.app.state.rf,
+        #         k_reranker=form_data.k_reranker
+        #         or request.app.state.config.TOP_K_RERANKER,
+        #         r=(
+        #             form_data.r
+        #             if form_data.r
+        #             else request.app.state.config.RELEVANCE_THRESHOLD
+        #         ),
+        #         hybrid_bm25_weight=(
+        #             form_data.hybrid_bm25_weight
+        #             if form_data.hybrid_bm25_weight
+        #             else request.app.state.config.HYBRID_BM25_WEIGHT
+        #         ),
+        #         user=user,
+        #     )
+        # else:
+        #     return query_doc(
+        #         collection_name=form_data.collection_name,
+        #         query_embedding=request.app.state.EMBEDDING_FUNCTION(
+        #             form_data.query, prefix=RAG_EMBEDDING_QUERY_PREFIX, user=user
+        #         ),
+        #         k=form_data.k if form_data.k else request.app.state.config.TOP_K,
+        #         user=user,
+        #     )
     except Exception as e:
         log.exception(e)
         raise HTTPException(
@@ -2035,18 +2058,21 @@ class DeleteForm(BaseModel):
     collection_name: str
     file_id: str
 
-
+# TODO YATIN: fix if file belongs to a collection(KB)
 @router.post("/delete")
 def delete_entries_from_collection(form_data: DeleteForm, user=Depends(get_admin_user)):
     try:
-        if VECTOR_DB_CLIENT.has_collection(collection_name=form_data.collection_name):
+        goknob_wrapper = GoKnowbWrapper.get_instance()
+        if goknob_wrapper.has_collection(collection_name=form_data.collection_name):
             file = Files.get_file_by_id(form_data.file_id)
-            hash = file.hash
 
-            VECTOR_DB_CLIENT.delete(
-                collection_name=form_data.collection_name,
-                metadata={"hash": hash},
-            )
+            goknob_wrapper.delete_collection(collection_name=f"file-{file.id}")
+            # hash = file.hash
+            #
+            # VECTOR_DB_CLIENT.delete(
+            #     collection_name=form_data.collection_name,
+            #     metadata={"hash": hash},
+            # )
             return {"status": True}
         else:
             return {"status": False}
@@ -2057,7 +2083,9 @@ def delete_entries_from_collection(form_data: DeleteForm, user=Depends(get_admin
 
 @router.post("/reset/db")
 def reset_vector_db(user=Depends(get_admin_user)):
-    VECTOR_DB_CLIENT.reset()
+    goknob_wrapper = GoKnowbWrapper.get_instance()
+    goknob_wrapper.reset()
+    # VECTOR_DB_CLIENT.reset()
     Knowledges.delete_all_knowledge()
 
 

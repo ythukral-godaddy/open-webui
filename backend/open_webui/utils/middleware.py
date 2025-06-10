@@ -91,7 +91,7 @@ from open_webui.env import (
     ENABLE_REALTIME_CHAT_SAVE,
 )
 from open_webui.constants import TASKS
-
+import json
 
 logging.basicConfig(stream=sys.stdout, level=GLOBAL_LOG_LEVEL)
 log = logging.getLogger(__name__)
@@ -599,7 +599,7 @@ async def chat_completion_files_handler(
     request: Request, body: dict, user: UserModel
 ) -> tuple[dict, dict[str, list]]:
     sources = []
-
+    log.debug(f"inside chat_completion_files_handler")
     if files := body.get("metadata", {}).get("files", None):
         queries = []
         try:
@@ -658,7 +658,7 @@ async def chat_completion_files_handler(
         except Exception as e:
             log.exception(e)
 
-        log.debug(f"rag_contexts:sources: {sources}")
+        log.debug(f"rag_contexts:sources: {json.dumps(sources)}")
 
     return body, {"sources": sources}
 
@@ -801,6 +801,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
 
     # Process the form_data through the pipeline
     try:
+        log.debug("process pipeline_inlet_filter")
         form_data = await process_pipeline_inlet_filter(
             request, form_data, user, models
         )
@@ -922,6 +923,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
 
     try:
         form_data, flags = await chat_completion_files_handler(request, form_data, user)
+        log.debug(f"sources before chat_completion_files_handler: {json.dumps(sources)}")
         sources.extend(flags.get("sources", []))
     except Exception as e:
         log.exception(e)
@@ -978,7 +980,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                 ),
                 form_data["messages"],
             )
-
+    log.debug(f"system message added to the message list: {json.dumps(form_data['messages'][0])} ")
     # If there are citations, add them to the data_items
     sources = [
         source

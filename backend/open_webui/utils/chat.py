@@ -164,7 +164,7 @@ async def generate_chat_completion(
     user: Any,
     bypass_filter: bool = False,
 ):
-    log.debug(f"generate_chat_completion: {form_data}")
+    log.debug(f"generate_chat_completion: {json.dumps(form_data)}")
     if BYPASS_MODEL_ACCESS_CONTROL:
         bypass_filter = True
 
