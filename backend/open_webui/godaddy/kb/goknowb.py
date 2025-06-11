@@ -85,7 +85,7 @@ class GoKnowbWrapper:
             raise
 
 
-    def update_collection_name(self, collection_name: str) -> str:
+    def _update_collection_name(self, collection_name: str) -> str:
         """Update the collection name to ensure it is valid."""
         if collection_name is None or collection_name == "":
             collection_name = self.BASE_COLLECTION_NAME
@@ -99,7 +99,7 @@ class GoKnowbWrapper:
     def has_collection(self, collection_name: str) -> bool:
         """Check if the collection exists in the vector DB."""
         try:
-            collection_name = self.update_collection_name(collection_name)
+            collection_name = self._update_collection_name(collection_name)
             result = self.client.get_kbnode_details(collection_name)
             if result.status_code==404 and result.get("error"):
                 log.debug(f"Collection {collection_name} does not exist: {result['error']}")
@@ -116,7 +116,7 @@ class GoKnowbWrapper:
     def delete_collection(self, collection_name: str) -> None:
         """Delete a collection from the vector DB."""
         try:
-            collection_name = self.update_collection_name(collection_name)
+            collection_name = self._update_collection_name(collection_name)
             result = self.client.delete_kbnode(collection_name)
             if result.status_code != 200:
                 raise Exception(f" API response: {result}")
@@ -128,7 +128,7 @@ class GoKnowbWrapper:
 
     def insert(self, collection_name: str, file_full_name: str) -> None:
         """Insert a list of vector items into a collection."""
-        collection_name = self.update_collection_name(collection_name)
+        collection_name = self._update_collection_name(collection_name)
         try:
             result = self.client.create_kbnode_with_file(
                 kb_node_id=collection_name,
@@ -136,11 +136,9 @@ class GoKnowbWrapper:
                 files=[file_full_name]
             )
             log.info(f"Successfully created file: {collection_name}/{file_full_name}")
-            return result
         except Exception as e:
             log.error(f"Failed to create file {collection_name}/{file_full_name}: {e}")
             raise
-        pass
 
     def upsert(self, collection_name: str, items: List[VectorItem]) -> None:
         """Insert or update vector items in a collection."""
@@ -223,7 +221,7 @@ class GoKnowbWrapper:
             if not collection_names or len(collection_names) == 0:
                 raise ValueError("Collection names cannot be empty or None.")
             for collection_name in collection_names:
-                kb_node_ids.append(self.update_collection_name(collection_name))
+                kb_node_ids.append(self._update_collection_name(collection_name))
             result = self.client.search_kb(
                 query=query,
                 kb_node_ids=kb_node_ids,
@@ -242,7 +240,7 @@ class GoKnowbWrapper:
             self, collection_name: str, file_full_name: str, limit: Optional[int] = None
     ) -> Optional[GetResult]:
         """Query vectors from a collection using metadata filter."""
-        collection_name = self.update_collection_name(collection_name)
+        collection_name = self._update_collection_name(collection_name)
         # TODO YATIN: implement when we have provision to fetch all doc for a file in a collection
 
 
@@ -255,7 +253,7 @@ class GoKnowbWrapper:
 
     def get(self, collection_name: str) -> Optional[GetResult]:
         """Retrieve all vectors from a collection."""
-        collection_name = self.update_collection_name(collection_name)
+        collection_name = self._update_collection_name(collection_name)
         # TODO YATIN: implement when we have provision to fetch all doc for a collection
         pass
 
@@ -266,13 +264,13 @@ class GoKnowbWrapper:
             filter: Optional[Dict] = None,
     ) -> None:
         """Delete vectors by ID or filter from a collection."""
-        collection_name = self.update_collection_name(collection_name)
+        collection_name = self._update_collection_name(collection_name)
         pass
 
     def reset(self) -> None:
         """Reset the vector database by removing all collections or those matching a condition."""
         try:
-            collection_name = self.update_collection_name(None)
+            collection_name = self._update_collection_name(None)
             result = self.client.delete_kbnode(collection_name)
             if result.status_code != 200:
                 raise Exception(f" API response: {result}")
