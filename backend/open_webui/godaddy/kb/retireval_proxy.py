@@ -38,8 +38,6 @@ from open_webui.models.knowledge import Knowledges
 from open_webui.storage.provider import Storage
 
 
-from open_webui.retrieval.vector.factory import VECTOR_DB_CLIENT
-
 # Document loaders
 from open_webui.retrieval.loaders.main import Loader
 from open_webui.retrieval.loaders.youtube import YoutubeLoader
@@ -118,6 +116,7 @@ def save_docs_to_vector_db(
     add: bool = False,
     user=None,
 ) -> bool:
+    log.debug(f"save_docs_to_vector_db collection name: {collection_name}, metadata: {metadata}, overwrite: {overwrite}, split: {split}, add: {add}")
     goknowb_wrapper = GoKnowbWrapper.get_instance()
     try:
         if goknowb_wrapper.has_collection(collection_name=collection_name):
@@ -133,9 +132,13 @@ def save_docs_to_vector_db(
                 return True
 
         log.info(f"adding to collection {collection_name}")
+        file_id = metadata.get('file_id')
+        file = Files.get_file_by_id(file_id)
+        log.debug(f"file path : {file.path}")
         full_file_name = f"{metadata.get('file_id')}_{metadata.get('name')}"
-        goknowb_wrapper.insert(collection_name, full_file_name)
+        goknowb_wrapper.insert(collection_name, file.path)
         return True
     except Exception as e:
         log.exception(e)
         raise e
+

@@ -98,10 +98,10 @@ def query_doc(
 
 def get_doc(collection_name: str, user: UserModel = None):
     try:
-        goknob_wrapper = GoKnowbWrapper.get_instance()
+        goknowb_wrapper = GoKnowbWrapper.get_instance()
         log.debug(f"get_doc:doc {collection_name}")
         # result = VECTOR_DB_CLIENT.get(collection_name=collection_name)
-        result = goknob_wrapper.get(collection_name=collection_name)
+        result = goknowb_wrapper.get(collection_name=collection_name)
 
         if result:
             log.info(f"query_doc:result {result.ids} {result.metadatas}")
@@ -279,12 +279,12 @@ def query_collection(
 ) -> dict:
     results = []
     error = False
-    goknob_wrapper = GoKnowbWrapper.get_instance()
+    goknowb_wrapper = GoKnowbWrapper.get_instance()
 
     def process_query_collection(collection_names: list[str], query):
         try:
             if collection_names and len(collection_names) > 0:
-                result = goknob_wrapper.search(
+                result = goknowb_wrapper.search(
                     collection_names=collection_names, query=query,
                     limit=k,
                     search_type=SearchType.SEMANTIC)
@@ -337,7 +337,7 @@ def query_collection_with_hybrid_search(
     # Fetch collection data once per collection sequentially
     # Avoid fetching the same data multiple times later
 
-    goknob_wrapper = GoKnowbWrapper.get_instance()
+    goknowb_wrapper = GoKnowbWrapper.get_instance()
 
     # collection_results = {}
     # for collection_name in collection_names:
@@ -358,7 +358,7 @@ def query_collection_with_hybrid_search(
 
     def process_query(collection_names: list[str], query):
         try:
-            result =  goknob_wrapper.search(
+            result =  goknowb_wrapper.search(
                 collection_names=collection_names, query=query,
                 limit=k,
                 search_type=SearchType.LEXICAL_AND_SEMANTIC)

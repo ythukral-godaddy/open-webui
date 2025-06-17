@@ -1243,8 +1243,8 @@ def process_file(
     user=Depends(get_verified_user),
 ):
     try:
-        log.debug(f"Processing file with form data: {json.dumps(form_data)}")
-        goknob_wrapper = GoKnowbWrapper.get_instance()
+        log.debug(f"Processing file with form data: {form_data}")
+        goknowb_wrapper = GoKnowbWrapper.get_instance()
         file = Files.get_file_by_id(form_data.file_id)
 
         collection_name = form_data.collection_name
@@ -1259,7 +1259,7 @@ def process_file(
 
             try:
                 # /files/{file_id}/data/content/update
-                goknob_wrapper.delete_collection(collection_name=f"file-{file.id}")
+                goknowb_wrapper.delete_collection(collection_name=f"file-{file.id}")
                 # VECTOR_DB_CLIENT.delete_collection(collection_name=f"file-{file.id}")
             except:
                 # Audio file upload pipeline
@@ -1282,11 +1282,13 @@ def process_file(
         elif form_data.collection_name:
             # Check if the file has already been processed and save the content
             # Usage: /knowledge/{id}/file/add, /knowledge/{id}/file/update
-
-            # TODO YATIN: need to replace once we have full file fetch feature in KB
-            result = VECTOR_DB_CLIENT.query(
-                collection_name=f"file-{file.id}", filter={"file_id": file.id}
+            log.debug(f"log 2: collection_name exist in form_data: {form_data.collection_name}")
+            result = goknowb_wrapper.queryByCollectionNameAndFileId(
+                collection_name=f"file-{file.id}",  file_full_name= f"{file.id}_{file.filename}"
             )
+            # result = VECTOR_DB_CLIENT.query(
+            #     collection_name=f"file-{file.id}", filter={"file_id": file.id}
+            # )
 
             if result is not None and len(result.ids[0]) > 0:
                 docs = [
@@ -1343,7 +1345,7 @@ def process_file(
                 docs = loader.load(
                     file.filename, file.meta.get("content_type"), file_path
                 )
-                log.debug(f"file docs: {docs}")
+                # log.debug(f"file docs: {docs}")
                 docs = [
                     Document(
                         page_content=doc.page_content,
@@ -1372,7 +1374,7 @@ def process_file(
                 ]
             text_content = " ".join([doc.page_content for doc in docs])
 
-        log.debug(f"text_content: {text_content}")
+        # log.debug(f"text_content: {text_content}")
         Files.update_file_data_by_id(
             file.id,
             {"content": text_content},
@@ -1381,9 +1383,11 @@ def process_file(
         hash = calculate_sha256_string(text_content)
         Files.update_file_hash_by_id(file.id, hash)
 
-        # TODO YATIN : update tfile hash in the database
+        # TODO YATIN : update file hash in the database
         # TODO YATIN : Update file content in the database
 
+
+        # For goknowb integration, docs isn't required. So above logic for docs is not required, have kept it just for the sake of minimal code change
         if not request.app.state.config.BYPASS_EMBEDDING_AND_RETRIEVAL:
             try:
                 result = save_docs_to_vector_db(
@@ -1936,10 +1940,10 @@ def query_doc_handler(
     user=Depends(get_verified_user),
 ):
     try:
-        goknob_wrapper = GoKnowbWrapper.get_instance()
+        goknowb_wrapper = GoKnowbWrapper.get_instance()
         search_type = SearchType.LEXICAL_AND_SEMANTIC if request.app.state.config.ENABLE_RAG_HYBRID_SEARCH else SearchType.SEMANTIC
 
-        return goknob_wrapper.search(
+        return goknowb_wrapper.search(
             collection_names=[form_data.collection_name], query=form_data.query,
             limit=form_data.k or request.app.state.config.TOP_K,
             search_type=search_type
@@ -2062,11 +2066,11 @@ class DeleteForm(BaseModel):
 @router.post("/delete")
 def delete_entries_from_collection(form_data: DeleteForm, user=Depends(get_admin_user)):
     try:
-        goknob_wrapper = GoKnowbWrapper.get_instance()
-        if goknob_wrapper.has_collection(collection_name=form_data.collection_name):
+        goknowb_wrapper = GoKnowbWrapper.get_instance()
+        if goknowb_wrapper.has_collection(collection_name=form_data.collection_name):
             file = Files.get_file_by_id(form_data.file_id)
 
-            goknob_wrapper.delete_collection(collection_name=f"file-{file.id}")
+            goknowb_wrapper.delete_file(form_data.collection_name, f"{file.id}_{file.filename}")
             # hash = file.hash
             #
             # VECTOR_DB_CLIENT.delete(
@@ -2083,8 +2087,8 @@ def delete_entries_from_collection(form_data: DeleteForm, user=Depends(get_admin
 
 @router.post("/reset/db")
 def reset_vector_db(user=Depends(get_admin_user)):
-    goknob_wrapper = GoKnowbWrapper.get_instance()
-    goknob_wrapper.reset()
+    goknowb_wrapper = GoKnowbWrapper.get_instance()
+    goknowb_wrapper.reset()
     # VECTOR_DB_CLIENT.reset()
     Knowledges.delete_all_knowledge()
 

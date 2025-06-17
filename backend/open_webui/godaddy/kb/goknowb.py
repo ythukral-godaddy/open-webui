@@ -11,7 +11,7 @@ from .goknowb_api_client import (
     KBNodeType,
     SearchType,
     AllowedPrincipal,
-    ACL, GoKnowbApiResponse
+    ACL, GoKnowbApiResponse, KBStrategy
 )
 from ...retrieval.vector.main import SearchResult, GetResult, VectorItem
 from open_webui.env import (
@@ -96,13 +96,20 @@ class GoKnowbWrapper:
             collection_name = f"{self.BASE_COLLECTION_NAME}/{collection_name}"
         return collection_name
 
+    def _update_collection_name_full_search(self,collection_name: str) -> str:
+        """Get the full search filename by appending 'full_search/'."""
+        if not collection_name.startswith(f"{self.BASE_COLLECTION_NAME}/full_search/"):
+            return self._update_collection_name(f"full_search/{collection_name}")
+        return collection_name
+
     def has_collection(self, collection_name: str) -> bool:
         """Check if the collection exists in the vector DB."""
         try:
             collection_name = self._update_collection_name(collection_name)
+            log.debug(f"Checking if collection exists: {collection_name}")
             result = self.client.get_kbnode_details(collection_name)
-            if result.status_code==404 and result.get("error"):
-                log.debug(f"Collection {collection_name} does not exist: {result['error']}")
+            if result.status_code==404 and result.data.get("error"):
+                log.debug(f"Collection {collection_name} does not exist: {result.data.get('error')}")
                 return False
             elif result.status_code==200:
                 log.debug(f"Collection {collection_name} exists.")
@@ -116,8 +123,11 @@ class GoKnowbWrapper:
     def delete_collection(self, collection_name: str) -> None:
         """Delete a collection from the vector DB."""
         try:
-            collection_name = self._update_collection_name(collection_name)
-            result = self.client.delete_kbnode(collection_name)
+            log.debug("delete_collection called with collection_name: %s", collection_name)
+            full_search_collection_name = self._update_collection_name_full_search(collection_name)
+            search_collection_name = self._update_collection_name(collection_name)
+            result = self.client.delete_kbnode(search_collection_name)
+            result = self.client.delete_kbnode(full_search_collection_name)
             if result.status_code != 200:
                 raise Exception(f" API response: {result}")
             log.debug(f"Successfully deleted collection_name: {collection_name}")
@@ -126,25 +136,50 @@ class GoKnowbWrapper:
             log.error(f"Failed to delete collection_name {collection_name}: {e}")
             raise
 
-    def insert(self, collection_name: str, file_full_name: str) -> None:
+    def delete_file(self, collection_name: str, file_full_name: str) -> None:
+        """Delete a file inside collection from the vector DB."""
+        try:
+            log.debug("delete_file called with collection_name: %s, file_full_name: %s", collection_name, file_full_name)
+            search_collection_name = self._update_collection_name(collection_name)
+            full_search_collection_name = self._update_collection_name_full_search(collection_name)
+            result = self.client.delete_kbnode(full_search_collection_name+"/"+file_full_name)
+            result = self.client.delete_kbnode(search_collection_name+"/"+file_full_name)
+            if result.status_code != 200:
+                raise Exception(f" API response: {result}")
+            log.debug(f"Successfully deleted collection_name: {collection_name}")
+
+        except Exception as e:
+            log.error(f"Failed to delete collection_name {collection_name}: {e}")
+            raise
+
+    def insert(self, collection_name: str, file_full_path: str) -> None:
         """Insert a list of vector items into a collection."""
-        collection_name = self._update_collection_name(collection_name)
+        full_search_collection_name = self._update_collection_name_full_search(collection_name)
+        search_collection_name = self._update_collection_name(collection_name)
         try:
             result = self.client.create_kbnode_with_file(
-                kb_node_id=collection_name,
-                resource_type=collection_name,
-                files=[file_full_name]
+                kb_node_id=search_collection_name,
+                resource_type=KBNodeType.DOCUMENT,
+                files=[file_full_path]
             )
-            log.info(f"Successfully created file: {collection_name}/{file_full_name}")
+            log.info(f"Successfully created file: {collection_name}/{file_full_path}")
+            result = self.client.create_kbnode_with_file(
+                kb_node_id=full_search_collection_name,
+                resource_type=KBNodeType.DOCUMENT,
+                files=[file_full_path],
+                kb_strategy=KBStrategy.KNOWB002,
+
+            )
+            log.info(f"Successfully created full search file: {full_search_collection_name}/{file_full_path}")
         except Exception as e:
-            log.error(f"Failed to create file {collection_name}/{file_full_name}: {e}")
+            log.error(f"Failed to create file {collection_name}/{file_full_path}: {e}")
             raise
 
     def upsert(self, collection_name: str, items: List[VectorItem]) -> None:
         """Insert or update vector items in a collection."""
         pass
 
-    def _create_search_result_from_response(goknowb_response: GoKnowbApiResponse) -> SearchResult:
+    def _create_search_result_from_response(self, goknowb_response: GoKnowbApiResponse) -> SearchResult:
         """
         Convert GoKnowB API response to SearchResult object.
 
@@ -237,14 +272,13 @@ class GoKnowbWrapper:
 
 
     def queryByCollectionNameAndFileId(
-            self, collection_name: str, file_full_name: str, limit: Optional[int] = None
+            self, collection_name: str, file_full_name: str, limit: Optional[int] = 5
     ) -> Optional[GetResult]:
         """Query vectors from a collection using metadata filter."""
-        collection_name = self._update_collection_name(collection_name)
+        full_search_collection_name = self._update_collection_name_full_search(collection_name)
         # TODO YATIN: implement when we have provision to fetch all doc for a file in a collection
+        return self.search([full_search_collection_name+"/"+file_full_name], "a", limit=limit, score_threshold=0.0)
 
-
-        pass
     def query(
             self, collection_name: str, filter: Dict, limit: Optional[int] = None
     ) -> Optional[GetResult]:
@@ -253,9 +287,9 @@ class GoKnowbWrapper:
 
     def get(self, collection_name: str) -> Optional[GetResult]:
         """Retrieve all vectors from a collection."""
-        collection_name = self._update_collection_name(collection_name)
+        full_search_collection_name = self._update_collection_name_full_search(collection_name)
+        return self.search([full_search_collection_name ], "a", score_threshold=0.0)
         # TODO YATIN: implement when we have provision to fetch all doc for a collection
-        pass
 
     def delete(
             self,
@@ -265,7 +299,7 @@ class GoKnowbWrapper:
     ) -> None:
         """Delete vectors by ID or filter from a collection."""
         collection_name = self._update_collection_name(collection_name)
-        pass
+
 
     def reset(self) -> None:
         """Reset the vector database by removing all collections or those matching a condition."""

@@ -192,7 +192,7 @@ class FilesTable:
                 return None
 
     def update_file_data_by_id(self, id: str, data: dict) -> Optional[FileModel]:
-        log.debug("update_file_data_by_id called with id: %s, data: %s", id, data)
+        # log.debug("update_file_data_by_id called with id: %s, data: %s", id, data)
         with get_db() as db:
             try:
                 file = db.query(File).filter_by(id=id).first()

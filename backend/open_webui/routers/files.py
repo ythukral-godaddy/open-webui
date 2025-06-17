@@ -21,6 +21,7 @@ from fastapi import (
 from fastapi.responses import FileResponse, StreamingResponse
 from open_webui.constants import ERROR_MESSAGES
 from open_webui.env import SRC_LOG_LEVELS
+from open_webui.godaddy.kb.goknowb import GoKnowbWrapper
 
 from open_webui.models.users import Users
 from open_webui.models.files import (
@@ -581,7 +582,6 @@ async def get_file_content_by_id(id: str, user=Depends(get_verified_user)):
 @router.delete("/{id}")
 async def delete_file_by_id(id: str, user=Depends(get_verified_user)):
     file = Files.get_file_by_id(id)
-
     if not file:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -599,6 +599,8 @@ async def delete_file_by_id(id: str, user=Depends(get_verified_user)):
         if result:
             try:
                 Storage.delete_file(file.path)
+                goknowb_wrapper = GoKnowbWrapper.get_instance()
+                goknowb_wrapper.delete_collection(collection_name=f"file-{file.id}")
             except Exception as e:
                 log.exception(e)
                 log.error("Error deleting files")

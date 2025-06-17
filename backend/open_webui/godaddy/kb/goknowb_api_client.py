@@ -2,14 +2,17 @@ from enum import Enum
 from typing import List, Optional, Dict, Any, Union
 import requests
 import time
+from pathlib import Path
 import uuid
 import logging
 from dataclasses import dataclass
 from datetime import datetime
 from open_webui.config import GOKNOWB_API_URL, GOKNOWB_API_KEY
+from open_webui.models.files import FileModel, Files
 from open_webui.env import (
     SRC_LOG_LEVELS
 )
+from open_webui.storage.provider import Storage
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["RAG"])
@@ -40,9 +43,9 @@ class SearchType(str, Enum):
 
 
 class KBStrategy(str, Enum):
-    KNOWB001 = "KNOWB001"
-    KNOWB002 = "KNOWB002"
-    KNOWB003 = "KNOWB003"
+    KNOWB001 = "KNOWB001" # (default): Semantic chunking (500 tokens)
+    KNOWB002 = "KNOWB002" # No chunking
+    KNOWB003 = "KNOWB003" # Fixed-size chunking (500 tokens)
 
 
 @dataclass
@@ -155,7 +158,6 @@ class KnowledgeBaseClient:
 
         log.debug(f"[{request_id}] Request Headers: {headers_copy}")
 
-
     def _log_request(self, method: str, url: str, data=None, files=None, request_id=None):
         """Log complete request information across multiple lines with request ID for tracing."""
         if not request_id:
@@ -260,6 +262,8 @@ class KnowledgeBaseClient:
 
         if not files and resource_type == KBNodeType.DOCUMENT:
             raise ValueError("Files must be provided for document type KBNode")
+
+        # Prepare form data
         data = {
             'kbNodeId': kb_node_id,
             'resourceType': resource_type.value,
@@ -292,7 +296,20 @@ class KnowledgeBaseClient:
 
         files_data = None
         if files:
-            files_data = [('files', open(f, 'rb')) for f in files]
+            files_data = []
+            for file_full_path in files:
+                try:
+                    # Open file and let requests handle MIME type detection
+                    # file = Files.get_file_by_id(file_id)
+                    file_path = Storage.get_file(file_full_path)
+                    file_path = Path(file_path)
+                    files_data.append(('files', open(file_path, 'rb')))
+                except IOError as e:
+                    log.error(f"Failed to open file {file_path}: {e}")
+                    # Close any already opened files
+                    for _, opened_file in files_data:
+                        opened_file.close()
+                    raise ValueError(f"Cannot open file: {file_path}")
 
         # Log request for debugging
         url = f"{self.base_url}/v1/kbnodes"
