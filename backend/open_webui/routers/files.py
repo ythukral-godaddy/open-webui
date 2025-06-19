@@ -103,7 +103,7 @@ def upload_file(
                 detail=ERROR_MESSAGES.DEFAULT("Invalid metadata format"),
             )
     file_metadata = metadata if metadata else {}
-    log.debug(f"file_metadata: {file_metadata}")
+
     try:
         unsanitized_filename = file.filename
         filename = os.path.basename(unsanitized_filename)
@@ -582,6 +582,7 @@ async def get_file_content_by_id(id: str, user=Depends(get_verified_user)):
 @router.delete("/{id}")
 async def delete_file_by_id(id: str, user=Depends(get_verified_user)):
     file = Files.get_file_by_id(id)
+
     if not file:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

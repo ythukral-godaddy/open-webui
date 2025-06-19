@@ -658,7 +658,7 @@ async def chat_completion_files_handler(
         except Exception as e:
             log.exception(e)
 
-        log.debug(f"rag_contexts:sources: {json.dumps(sources)}")
+        log.debug(f"rag_contexts:sources: {sources}")
 
     return body, {"sources": sources}
 
@@ -923,7 +923,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
 
     try:
         form_data, flags = await chat_completion_files_handler(request, form_data, user)
-        log.debug(f"sources before chat_completion_files_handler: {json.dumps(sources)}")
+        # log.debug(f"sources before chat_completion_files_handler: {json.dumps(sources)}")
         sources.extend(flags.get("sources", []))
     except Exception as e:
         log.exception(e)
@@ -980,7 +980,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                 ),
                 form_data["messages"],
             )
-    log.debug(f"system message added to the message list: {json.dumps(form_data['messages'][0])} ")
+    # log.debug(f"system message added to the message list: {json.dumps(form_data['messages'][0])} ")
     # If there are citations, add them to the data_items
     sources = [
         source

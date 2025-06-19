@@ -474,7 +474,7 @@ def get_sources_from_files(
     relevant_contexts = []
 
     for file in files:
-        log.debug(f" Processing file: {file}")
+
         context = None
         if file.get("docs"):
             # BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL
@@ -492,7 +492,7 @@ def get_sources_from_files(
             file.get("type") != "web_search"
             and request.app.state.config.BYPASS_EMBEDDING_AND_RETRIEVAL
         ):
-            log.debug("yatin BYPASS_EMBEDDING_AND_RETRIEVAL is enabled, using file data directly")
+            log.debug("BYPASS_EMBEDDING_AND_RETRIEVAL is enabled, using file data directly")
             # BYPASS_EMBEDDING_AND_RETRIEVAL
             if file.get("type") == "collection":
                 file_ids = file.get("data", {}).get("file_ids", [])
@@ -501,7 +501,7 @@ def get_sources_from_files(
                 metadatas = []
                 for file_id in file_ids:
                     file_object = Files.get_file_by_id(file_id)
-                    log.debug(f"yatin collection file_object: {file_object}")
+
                     if file_object:
                         documents.append(file_object.data.get("content", ""))
                         metadatas.append(

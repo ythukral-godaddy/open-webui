@@ -1374,7 +1374,7 @@ def process_file(
                 ]
             text_content = " ".join([doc.page_content for doc in docs])
 
-        # log.debug(f"text_content: {text_content}")
+        log.debug(f"text_content: {text_content}")
         Files.update_file_data_by_id(
             file.id,
             {"content": text_content},
@@ -1941,12 +1941,21 @@ def query_doc_handler(
 ):
     try:
         goknowb_wrapper = GoKnowbWrapper.get_instance()
-        search_type = SearchType.LEXICAL_AND_SEMANTIC if request.app.state.config.ENABLE_RAG_HYBRID_SEARCH else SearchType.SEMANTIC
+        search_type = SearchType.SEMANTIC
+        r = 0.0
+        if request.app.state.config.ENABLE_RAG_HYBRID_SEARCH:
+            search_type = SearchType.LEXICAL_AND_SEMANTIC
+            r = (
+                    form_data.r
+                    if form_data.r
+                    else request.app.state.config.RELEVANCE_THRESHOLD
+                )
 
         return goknowb_wrapper.search(
             collection_names=[form_data.collection_name], query=form_data.query,
-            limit=form_data.k or request.app.state.config.TOP_K,
-            search_type=search_type
+            limit=form_data.k if form_data.k else request.app.state.config.TOP_K,
+            search_type=search_type,
+            score_threshold=r
         )
         # if request.app.state.config.ENABLE_RAG_HYBRID_SEARCH:
         #

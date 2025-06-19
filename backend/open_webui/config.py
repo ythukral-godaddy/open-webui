@@ -2987,5 +2987,5 @@ LDAP_CIPHERS = PersistentConfig(
 GOKNOWB_API_URL = os.getenv("GOKNOWB_API_URL", "http://localhost:8000")
 GOKNOWB_API_KEY = os.getenv("GOKNOWB_API_KEY", "")
 GOKNOWB_ADDITIONAL_PARAMS = os.getenv("GOKNOWB_ADDITIONAL_PARAMS", "{}")
-log.info("GOKNOWB API URL set to: %s", GOKNOWB_API_URL)
-log.info("GOKNOWB API Key set to: %s", GOKNOWB_API_KEY)
+log.debug("GOKNOWB API URL set to: %s", GOKNOWB_API_URL)
+log.debug("GOKNOWB API Key set to: %s", GOKNOWB_API_KEY)
