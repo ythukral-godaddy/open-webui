@@ -247,7 +247,7 @@ class GoKnowbWrapper:
             self, collection_names: list[str],
             query: str,
             limit: Optional[int] = 5,
-            score_threshold: Optional[float] = 0.5,
+            score_threshold: Optional[float] = 0.1,
             search_type: SearchType = SearchType.SEMANTIC
     ) -> Optional[SearchResult]:
         """Search for similar vectors in a collection."""

@@ -361,7 +361,8 @@ def query_collection_with_hybrid_search(
             result =  goknowb_wrapper.search(
                 collection_names=collection_names, query=query,
                 limit=k,
-                search_type=SearchType.LEXICAL_AND_SEMANTIC)
+                search_type=SearchType.LEXICAL_AND_SEMANTIC,
+            score_threshold=r)
 
             # result = query_doc_with_hybrid_search(
             #     collection_name=collection_name,
@@ -464,7 +465,7 @@ def get_sources_from_files(
     hybrid_search,
     full_context=False,
 ):
-    log.debug(f"yatin queries : {queries}")
+    log.debug(f" queries : {queries}")
     log.debug(
         f"files: {files} {queries} {embedding_function} {reranking_function} {full_context}"
     )
@@ -473,7 +474,7 @@ def get_sources_from_files(
     relevant_contexts = []
 
     for file in files:
-        log.debug(f"yatin Processing file: {file}")
+        log.debug(f" Processing file: {file}")
         context = None
         if file.get("docs"):
             # BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL
@@ -559,7 +560,7 @@ def get_sources_from_files(
                 continue
 
             if full_context:
-                log.debug("yatin full_context is enabled, fetching all items from collections")
+                log.debug("full_context is enabled, fetching all items from collections")
                 try:
                     context = get_all_items_from_collections(collection_names)
                 except Exception as e:
