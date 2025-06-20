@@ -162,7 +162,10 @@ class GoKnowbWrapper:
                 resource_type=KBNodeType.DOCUMENT,
                 files=[file_full_path]
             )
+            if result.status_code != 202:
+                raise Exception(f" API response: {result}")
             log.info(f"Successfully created file: {collection_name}/{file_full_path}")
+
             result = self.client.create_kbnode_with_file(
                 kb_node_id=full_search_collection_name,
                 resource_type=KBNodeType.DOCUMENT,
@@ -170,7 +173,10 @@ class GoKnowbWrapper:
                 kb_strategy=KBStrategy.KNOWB002,
 
             )
+            if result.status_code != 202:
+                raise Exception(f" API response: {result}")
             log.info(f"Successfully created full search file: {full_search_collection_name}/{file_full_path}")
+
         except Exception as e:
             log.error(f"Failed to create file {collection_name}/{file_full_path}: {e}")
             raise
@@ -264,6 +270,8 @@ class GoKnowbWrapper:
                 score_threshold=score_threshold,
                 search_type=search_type
             )
+            if result.status_code != 202:
+                raise Exception(f" API response: {result}")
             log.debug(f"Search completed for query: {query[:50]}...")
             return self._create_search_result_from_response(result)
         except Exception as e:

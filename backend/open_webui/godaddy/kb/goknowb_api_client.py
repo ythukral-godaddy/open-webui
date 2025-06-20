@@ -2,17 +2,22 @@ from enum import Enum
 from typing import List, Optional, Dict, Any, Union
 import requests
 import time
+import os
 from pathlib import Path
 import uuid
 import logging
 from dataclasses import dataclass
 from datetime import datetime
+from cachetools import cached, LRUCache, TTLCache
 from open_webui.config import GOKNOWB_API_URL, GOKNOWB_API_KEY
 from open_webui.models.files import FileModel, Files
 from open_webui.env import (
     SRC_LOG_LEVELS
 )
 from open_webui.storage.provider import Storage
+from gd_auth.client import AwsIamAuthTokenClient
+
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev-private")
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["RAG"])
@@ -98,12 +103,10 @@ class KnowledgeBaseClient:
         No arguments required - uses hardcoded configuration and internal token generation.
         """
         self.base_url = self.BASE_URL.rstrip('/')
-        # Generate token internally
-        sso_jwt_token = self._generate_token()
-        self.headers = {
-            "Authorization": f"sso-jwt {sso_jwt_token}"
-        }
 
+
+    # 40 min cache
+    @cached(cache=TTLCache(maxsize=10, ttl=2400))
     def _generate_token(self) -> str:
         """
         Generate a fresh SSO JWT token.
@@ -114,49 +117,51 @@ class KnowledgeBaseClient:
         Returns:
             str: Fresh SSO JWT token
         """
+
         # TODO YATIN: Implement your token generation logic here
-        # Examples:
-        # 1. Call OAuth endpoint with client credentials
-        # 2. Use service account credentials
-        # 3. Read from secure token store
-        # 4. Generate JWT with signing key
+        # sso_host = {
+        #     "dev-private": "sso.dev-godaddy.com",
+        #     "dev": "sso.dev-godaddy.com",
+        #     "test": "sso.test-godaddy.com",
+        #     "prod": "sso.godaddy.com",
+        # }["prod"]
+        # sso_client = AwsIamAuthTokenClient(
+        #     sso_host=sso_host, refresh_min=45, primary_region="us-west-2", secondary_region="us-west-2"
+        # )
+        # token = sso_client.token
+        # log.debug(f"Generated SSO JWT token: {token} )")
+        # return token
 
-        # Placeholder implementation - replace with actual logic
-        demo_token = GOKNOWB_API_KEY
+        return GOKNOWB_API_KEY
 
-        # Example of what a real implementation might look like:
-        # try:
-        #     import os
-        #     response = requests.post(
-        #         "https://auth.godaddy.com/oauth/token",
-        #         data={
-        #             "grant_type": "client_credentials",
-        #             "client_id": os.getenv("CLIENT_ID"),
-        #             "client_secret": os.getenv("CLIENT_SECRET"),
-        #             "scope": "kb:read kb:write"
-        #         }
-        #     )
-        #     return response.json()["access_token"]
-        # except Exception as e:
-        #     print(f"Token generation failed: {e}")
-        #     raise
+    def _get_headers(self) -> Dict[str, str]:
+        """
+        Get the headers for API requests.
+        This method returns the headers including the SSO JWT token.
+        Returns:
+            Dict[str, str]: Headers for API requests
+        """
 
-        return demo_token
+        sso_jwt_token = self._generate_token()
+        headers = {
+            "Authorization": f"sso-jwt {sso_jwt_token}"
+        }
+        return headers
 
     def _generate_request_id(self) -> str:
         """Generate a unique request ID for tracing."""
         return str(uuid.uuid4())[:8]
 
-    def _log_headers(self, request_id: str):
-        """Log request headers with sensitive information masked."""
-        headers_copy = self.headers.copy()
-        if 'Authorization' in headers_copy:
-            # Mask the token for security
-            auth_header = headers_copy['Authorization']
-            if len(auth_header) > 20:
-                headers_copy['Authorization'] = f"{auth_header[:15]}...{auth_header[-5:]}"
-
-        log.debug(f"[{request_id}] Request Headers: {headers_copy}")
+    # def _log_headers(self, request_id: str):
+    #     """Log request headers with sensitive information masked."""
+    #     headers_copy = self._get_headers().copy()
+    #     if 'Authorization' in headers_copy:
+    #         # Mask the token for security
+    #         auth_header = headers_copy['Authorization']
+    #         if len(auth_header) > 20:
+    #             headers_copy['Authorization'] = f"{auth_header[:15]}...{auth_header[-5:]}"
+    #
+    #     log.debug(f"[{request_id}] Request Headers: {headers_copy}")
 
     def _log_request(self, method: str, url: str, data=None, files=None, request_id=None):
         """Log complete request information across multiple lines with request ID for tracing."""
@@ -234,10 +239,9 @@ class KnowledgeBaseClient:
         """Check if the service is healthy."""
         url = f"{self.base_url}/health_check"
         request_id = self._log_request("GET", url)
-        # Optionally log headers for health check debugging
-        # self._log_headers(request_id)
 
-        response = requests.get(url, headers=self.headers)
+
+        response = requests.get(url, headers=self._get_headers())
         result = self._handle_response(response, request_id)
         return result.data.get('healthy', False)
 
@@ -318,7 +322,7 @@ class KnowledgeBaseClient:
         try:
             response = requests.post(
                 url,
-                headers=self.headers,
+                headers=self._get_headers(),
                 data=data,
                 files=files_data
             )
@@ -386,7 +390,7 @@ class KnowledgeBaseClient:
         url = f"{self.base_url}/v1/kbnodes/{kb_node_id}"
         request_id = self._log_request("GET", url)
 
-        response = requests.get(url, headers=self.headers)
+        response = requests.get(url, headers=self._get_headers())
         return self._handle_response(response, request_id)
 
     def update_kbnode(self, kb_node_id: str, acl: ACL) -> GoKnowbApiResponse:
@@ -414,7 +418,7 @@ class KnowledgeBaseClient:
         url = f"{self.base_url}/v1/kbnodes/{kb_node_id}"
         request_id = self._log_request("PATCH", url, data=data)
 
-        response = requests.patch(url, headers=self.headers, json=data)
+        response = requests.patch(url, headers=self._get_headers(), json=data)
         return self._handle_response(response, request_id)
 
     def delete_kbnode(self, kb_node_id: str) -> GoKnowbApiResponse:
@@ -422,7 +426,7 @@ class KnowledgeBaseClient:
         url = f"{self.base_url}/v1/kbnodes/{kb_node_id}"
         request_id = self._log_request("DELETE", url)
 
-        response = requests.delete(url, headers=self.headers)
+        response = requests.delete(url, headers=self._get_headers())
         return self._handle_response(response, request_id)
 
     def search_kb(
@@ -471,5 +475,5 @@ class KnowledgeBaseClient:
         url = f"{self.base_url}/v1/search"
         request_id = self._log_request("POST", url, data=data)
 
-        response = requests.post(url, headers=self.headers, json=data)
+        response = requests.post(url, headers=self._get_headers(), json=data)
         return self._handle_response(response, request_id)
