@@ -48,10 +48,6 @@ class Vector:
                 from open_webui.retrieval.vector.dbs.chroma import ChromaClient
 
                 return ChromaClient()
-            case VectorType.CUSTOM_KB:
-                from open_webui.retrieval.vector.dbs.custom_kb import CustomKBClient
-
-                return CustomKBClient()
             case _:
                 raise ValueError(f"Unsupported vector type: {vector_type}")
 

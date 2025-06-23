@@ -9,4 +9,3 @@ class VectorType(StrEnum):
     ELASTICSEARCH = "elasticsearch"
     OPENSEARCH = "opensearch"
     PGVECTOR = "pgvector"
-    CUSTOM_KB = "custom_kb"
