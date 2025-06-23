@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 import logging
 
+from open_webui.godaddy.kb.goknowb import GoKnowbWrapper
 from open_webui.models.knowledge import (
     Knowledges,
     KnowledgeForm,
@@ -10,7 +11,6 @@ from open_webui.models.knowledge import (
     KnowledgeUserResponse,
 )
 from open_webui.models.files import Files, FileModel, FileMetadataResponse
-from open_webui.retrieval.vector.factory import VECTOR_DB_CLIENT
 from open_webui.routers.retrieval import (
     process_file,
     ProcessFileForm,
@@ -199,10 +199,15 @@ async def reindex_knowledge_files(request: Request, user=Depends(get_verified_us
             file_ids = knowledge_base.data.get("file_ids", [])
             files = Files.get_files_by_ids(file_ids)
             try:
-                if VECTOR_DB_CLIENT.has_collection(collection_name=knowledge_base.id):
-                    VECTOR_DB_CLIENT.delete_collection(
+                goknowb_wrapper = GoKnowbWrapper.get_instance()
+                if goknowb_wrapper.has_collection(collection_name=knowledge_base.id):
+                    goknowb_wrapper.delete_collection(
                         collection_name=knowledge_base.id
                     )
+                # if VECTOR_DB_CLIENT.has_collection(collection_name=knowledge_base.id):
+                #     VECTOR_DB_CLIENT.delete_collection(
+                #         collection_name=knowledge_base.id
+                #     )
             except Exception as e:
                 log.error(f"Error deleting collection {knowledge_base.id}: {str(e)}")
                 continue  # Skip, don't raise
@@ -448,9 +453,11 @@ def update_file_from_knowledge_by_id(
         )
 
     # Remove content from the vector database
-    VECTOR_DB_CLIENT.delete(
-        collection_name=knowledge.id, filter={"file_id": form_data.file_id}
-    )
+    goknowb_wrapper = GoKnowbWrapper.get_instance()
+    goknowb_wrapper.delete_file(collection_name=knowledge.id, file_full_name= f"{file.id}_{file.filename}")
+    # VECTOR_DB_CLIENT.delete(
+    #     collection_name=knowledge.id, filter={"file_id": form_data.file_id}
+    # )
 
     # Add content to the vector database
     try:
@@ -518,10 +525,12 @@ def remove_file_from_knowledge_by_id(
         )
 
     # Remove content from the vector database
+    goknowb_wrapper = GoKnowbWrapper.get_instance()
     try:
-        VECTOR_DB_CLIENT.delete(
-            collection_name=knowledge.id, filter={"file_id": form_data.file_id}
-        )
+        goknowb_wrapper.delete_file(collection_name=knowledge.id, file_full_name=f"{file.id}_{file.filename}")
+        # VECTOR_DB_CLIENT.delete(
+        #     collection_name=knowledge.id, filter={"file_id": form_data.file_id}
+        # )
     except Exception as e:
         log.debug("This was most likely caused by bypassing embedding processing")
         log.debug(e)
@@ -530,8 +539,10 @@ def remove_file_from_knowledge_by_id(
     try:
         # Remove the file's collection from vector database
         file_collection = f"file-{form_data.file_id}"
-        if VECTOR_DB_CLIENT.has_collection(collection_name=file_collection):
-            VECTOR_DB_CLIENT.delete_collection(collection_name=file_collection)
+        if goknowb_wrapper.has_collection(collection_name=file_collection):
+            goknowb_wrapper.delete_collection(collection_name=file_collection)
+        # if VECTOR_DB_CLIENT.has_collection(collection_name=file_collection):
+        #     VECTOR_DB_CLIENT.delete_collection(collection_name=file_collection)
     except Exception as e:
         log.debug("This was most likely caused by bypassing embedding processing")
         log.debug(e)
@@ -629,7 +640,9 @@ async def delete_knowledge_by_id(id: str, user=Depends(get_verified_user)):
 
     # Clean up vector DB
     try:
-        VECTOR_DB_CLIENT.delete_collection(collection_name=id)
+        goknowb_wrapper = GoKnowbWrapper.get_instance()
+        goknowb_wrapper.delete_collection(collection_name=id)
+        # VECTOR_DB_CLIENT.delete_collection(collection_name=id)
     except Exception as e:
         log.debug(e)
         pass
@@ -662,7 +675,9 @@ async def reset_knowledge_by_id(id: str, user=Depends(get_verified_user)):
         )
 
     try:
-        VECTOR_DB_CLIENT.delete_collection(collection_name=id)
+        goknowb_wrapper = GoKnowbWrapper.get_instance()
+        goknowb_wrapper.delete_collection(collection_name=id)
+        # VECTOR_DB_CLIENT.delete_collection(collection_name=id)
     except Exception as e:
         log.debug(e)
         pass

@@ -19,7 +19,8 @@ from open_webui.models.users import UserModel
 from open_webui.models.files import Files
 
 from open_webui.retrieval.vector.main import GetResult
-
+from open_webui.godaddy.kb.goknowb import GoKnowbWrapper
+from open_webui.godaddy.kb.goknowb_api_client import SearchType
 
 from open_webui.env import (
     SRC_LOG_LEVELS,
@@ -77,6 +78,7 @@ class VectorSearchRetriever(BaseRetriever):
 def query_doc(
     collection_name: str, query_embedding: list[float], k: int, user: UserModel = None
 ):
+    raise Exception("Use GoKnowbWrapper instead of VECTOR_DB_CLIENT directly")
     try:
         log.debug(f"query_doc:doc {collection_name}")
         result = VECTOR_DB_CLIENT.search(
@@ -96,8 +98,10 @@ def query_doc(
 
 def get_doc(collection_name: str, user: UserModel = None):
     try:
+        goknowb_wrapper = GoKnowbWrapper.get_instance()
         log.debug(f"get_doc:doc {collection_name}")
-        result = VECTOR_DB_CLIENT.get(collection_name=collection_name)
+        # result = VECTOR_DB_CLIENT.get(collection_name=collection_name)
+        result = goknowb_wrapper.get(collection_name=collection_name)
 
         if result:
             log.info(f"query_doc:result {result.ids} {result.metadatas}")
@@ -119,6 +123,7 @@ def query_doc_with_hybrid_search(
     r: float,
     hybrid_bm25_weight: float,
 ) -> dict:
+    raise Exception("Use GoKnowbWrapper instead of VECTOR_DB_CLIENT directly")
     try:
         log.debug(f"query_doc_with_hybrid_search:doc {collection_name}")
         bm25_retriever = BM25Retriever.from_texts(
@@ -274,15 +279,15 @@ def query_collection(
 ) -> dict:
     results = []
     error = False
+    goknowb_wrapper = GoKnowbWrapper.get_instance()
 
-    def process_query_collection(collection_name, query_embedding):
+    def process_query_collection(collection_names: list[str], query):
         try:
-            if collection_name:
-                result = query_doc(
-                    collection_name=collection_name,
-                    k=k,
-                    query_embedding=query_embedding,
-                )
+            if collection_names and len(collection_names) > 0:
+                result = goknowb_wrapper.search(
+                    collection_names=collection_names, query=query,
+                    limit=k,
+                    search_type=SearchType.SEMANTIC)
                 if result is not None:
                     return result.model_dump(), None
             return None, None
@@ -291,19 +296,18 @@ def query_collection(
             return None, e
 
     # Generate all query embeddings (in one call)
-    query_embeddings = embedding_function(queries, prefix=RAG_EMBEDDING_QUERY_PREFIX)
+    # query_embeddings = embedding_function(queries, prefix=RAG_EMBEDDING_QUERY_PREFIX)
     log.debug(
         f"query_collection: processing {len(queries)} queries across {len(collection_names)} collections"
     )
 
     with ThreadPoolExecutor() as executor:
         future_results = []
-        for query_embedding in query_embeddings:
-            for collection_name in collection_names:
-                result = executor.submit(
-                    process_query_collection, collection_name, query_embedding
-                )
-                future_results.append(result)
+        for query in queries:
+            result = executor.submit(
+                process_query_collection, collection_names, query
+            )
+            future_results.append(result)
         task_results = [future.result() for future in future_results]
 
     for result, err in task_results:
@@ -332,36 +336,45 @@ def query_collection_with_hybrid_search(
     error = False
     # Fetch collection data once per collection sequentially
     # Avoid fetching the same data multiple times later
-    collection_results = {}
-    for collection_name in collection_names:
-        try:
-            log.debug(
-                f"query_collection_with_hybrid_search:VECTOR_DB_CLIENT.get:collection {collection_name}"
-            )
-            collection_results[collection_name] = VECTOR_DB_CLIENT.get(
-                collection_name=collection_name
-            )
-        except Exception as e:
-            log.exception(f"Failed to fetch collection {collection_name}: {e}")
-            collection_results[collection_name] = None
 
-    log.info(
-        f"Starting hybrid search for {len(queries)} queries in {len(collection_names)} collections..."
-    )
+    goknowb_wrapper = GoKnowbWrapper.get_instance()
 
-    def process_query(collection_name, query):
+    # collection_results = {}
+    # for collection_name in collection_names:
+    #     try:
+    #         log.debug(
+    #             f"query_collection_with_hybrid_search:VECTOR_DB_CLIENT.get:collection {collection_name}"
+    #         )
+    #         collection_results[collection_name] = VECTOR_DB_CLIENT.get(
+    #             collection_name=collection_name
+    #         )
+    #     except Exception as e:
+    #         log.exception(f"Failed to fetch collection {collection_name}: {e}")
+    #         collection_results[collection_name] = None
+    #
+    # log.info(
+    #     f"Starting hybrid search for {len(queries)} queries in {len(collection_names)} collections..."
+    # )
+
+    def process_query(collection_names: list[str], query):
         try:
-            result = query_doc_with_hybrid_search(
-                collection_name=collection_name,
-                collection_result=collection_results[collection_name],
-                query=query,
-                embedding_function=embedding_function,
-                k=k,
-                reranking_function=reranking_function,
-                k_reranker=k_reranker,
-                r=r,
-                hybrid_bm25_weight=hybrid_bm25_weight,
-            )
+            result =  goknowb_wrapper.search(
+                collection_names=collection_names, query=query,
+                limit=k,
+                search_type=SearchType.LEXICAL_AND_SEMANTIC,
+            score_threshold=r)
+
+            # result = query_doc_with_hybrid_search(
+            #     collection_name=collection_name,
+            #     collection_result=collection_results[collection_name],
+            #     query=query,
+            #     embedding_function=embedding_function,
+            #     k=k,
+            #     reranking_function=reranking_function,
+            #     k_reranker=k_reranker,
+            #     r=r,
+            #     hybrid_bm25_weight=hybrid_bm25_weight,
+            # )
             return result, None
         except Exception as e:
             log.exception(f"Error when querying the collection with hybrid_search: {e}")
@@ -370,9 +383,7 @@ def query_collection_with_hybrid_search(
     # Prepare tasks for all collections and queries
     # Avoid running any tasks for collections that failed to fetch data (have assigned None)
     tasks = [
-        (cn, q)
-        for cn in collection_names
-        if collection_results[cn] is not None
+        (collection_names, q)
         for q in queries
     ]
 
@@ -454,6 +465,7 @@ def get_sources_from_files(
     hybrid_search,
     full_context=False,
 ):
+    log.debug(f" queries : {queries}")
     log.debug(
         f"files: {files} {queries} {embedding_function} {reranking_function} {full_context}"
     )
@@ -480,6 +492,7 @@ def get_sources_from_files(
             file.get("type") != "web_search"
             and request.app.state.config.BYPASS_EMBEDDING_AND_RETRIEVAL
         ):
+            log.debug("BYPASS_EMBEDDING_AND_RETRIEVAL is enabled, using file data directly")
             # BYPASS_EMBEDDING_AND_RETRIEVAL
             if file.get("type") == "collection":
                 file_ids = file.get("data", {}).get("file_ids", [])
@@ -547,6 +560,7 @@ def get_sources_from_files(
                 continue
 
             if full_context:
+                log.debug("full_context is enabled, fetching all items from collections")
                 try:
                     context = get_all_items_from_collections(collection_names)
                 except Exception as e:

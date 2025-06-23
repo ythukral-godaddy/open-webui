@@ -2982,3 +2982,10 @@ LDAP_VALIDATE_CERT = PersistentConfig(
 LDAP_CIPHERS = PersistentConfig(
     "LDAP_CIPHERS", "ldap.server.ciphers", os.environ.get("LDAP_CIPHERS", "ALL")
 )
+
+# GOKNOWB Knowledge Base Configuration
+GOKNOWB_API_URL = os.getenv("GOKNOWB_API_URL", "http://localhost:8000")
+GOKNOWB_API_KEY = os.getenv("GOKNOWB_API_KEY", "")
+GOKNOWB_ADDITIONAL_PARAMS = os.getenv("GOKNOWB_ADDITIONAL_PARAMS", "{}")
+log.debug("GOKNOWB API URL set to: %s", GOKNOWB_API_URL)
+log.debug("GOKNOWB API Key set to: %s", GOKNOWB_API_KEY)
